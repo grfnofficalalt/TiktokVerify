@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>VidShare — Verification</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body{
+    margin:0;min-height:100vh;display:grid;place-items:center;
+    background:#0f0f14;color:#e9e9f1;font-family:system-ui,sans-serif
+  }
+  .card{
+    position:relative;
+    width:min(420px,92vw);background:#16161e;border-radius:18px;
+    padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.45);
+    z-index:2;
+  }
+  input{
+    width:100%;padding:12px 14px;border-radius:12px;
+    border:1px solid #2a2a3a;background:#0f0f16;color:#fff
+  }
+  button{
+    width:100%;margin-top:16px;padding:12px;border-radius:14px;
+    border:none;cursor:pointer;font-weight:700;
+    background:#6cf2c2;color:#0b0b10
+  }
+
+  .status{
+    margin-top:14px;padding:12px;border-radius:12px;
+    display:none;font-weight:600;text-align:center
+  }
+  .error{background:#1a0f0f;border:1px solid #3a1e1e;color:#ff6b6b}
+  .success{background:#0f1a14;border:1px solid #1e3a2d;color:#2ad88f}
+
+  .barWrap{
+    margin-top:14px;background:#0f0f16;border-radius:10px;
+    overflow:hidden;display:none
+  }
+  .bar{
+    height:10px;width:0%;
+    background:linear-gradient(90deg,#6cf2c2,#58b8ff);
+    transition:width .12s linear
+  }
+
+  .progressText{
+    margin-top:8px;font-size:.85rem;
+    color:#a7a7c0;text-align:center;display:none
+  }
+
+  .checkmark{
+    font-size:2rem;
+    animation:pop .4s ease-out
+  }
+
+  @keyframes pop{
+    from{transform:scale(.6);opacity:0}
+    to{transform:scale(1);opacity:1}
+  }
+
+  canvas{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:1;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="confetti"></canvas>
+
+<div class="card">
+  <h2>Account Verification</h2>
+  <input id="handle" placeholder="@yourname" />
+  <button id="verifyBtn">Verify Account</button>
+
+  <div id="status" class="status"></div>
+
+  <div id="barWrap" class="barWrap">
+    <div id="bar" class="bar"></div>
+  </div>
+
+  <div id="progressText" class="progressText"></div>
+</div>
+
+<script>
+const btn = document.getElementById("verifyBtn");
+const input = document.getElementById("handle");
+const status = document.getElementById("status");
+const barWrap = document.getElementById("barWrap");
+const bar = document.getElementById("bar");
+const progressText = document.getElementById("progressText");
+
+const steps = [
+  "Checking eligibility…",
+  "Applying badge…",
+  "Finalizing…"
+];
+
+// ---------- SOUND ----------
+function playSuccessSound(){
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.type = "sine";
+  osc.frequency.value = 880;
+  gain.gain.value = 0.15;
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.start();
+  osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.25);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+
+  osc.stop(ctx.currentTime + 0.3);
+}
+
+// ---------- CONFETTI ----------
+const canvas = document.getElementById("confetti");
+const ctx = canvas.getContext("2d");
+let confetti = [];
+
+function resizeCanvas(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+function launchConfetti(){
+  confetti = Array.from({length:120}, () => ({
+    x: Math.random()*canvas.width,
+    y: -20,
+    r: Math.random()*6+4,
+    c: `hsl(${Math.random()*360},100%,60%)`,
+    vx: Math.random()*4-2,
+    vy: Math.random()*6+3
+  }));
+}
+
+function updateConfetti(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  confetti.forEach(p=>{
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.05;
+    ctx.fillStyle=p.c;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.fill();
+  });
+  confetti = confetti.filter(p=>p.y<canvas.height+20);
+  if(confetti.length) requestAnimationFrame(updateConfetti);
+}
+
+// ---------- MAIN ----------
+btn.addEventListener("click", () => {
+  const raw = input.value.trim();
+  status.style.display = "none";
+
+  if(!raw){
+    status.className="status error";
+    status.textContent="Verification failed: no input";
+    status.style.display="block";
+    return;
+  }
+
+  const handle = raw.replace(/\s+/g,"").replace(/^@/,"");
+
+  btn.disabled=true;
+  btn.textContent="Verifying…";
+  barWrap.style.display="block";
+  progressText.style.display="block";
+  bar.style.width="0%";
+
+  let progress=0, step=0;
+
+  const interval=setInterval(()=>{
+    progress+=Math.random()*6+4;
+    if(step<steps.length-1 && progress>(step+1)*33) step++;
+    progressText.textContent=`${steps[step]} ${Math.floor(progress)}%`;
+
+    if(progress>=100){
+      clearInterval(interval);
+      bar.style.width="100%";
+
+      status.className="status success";
+      status.innerHTML=`<div class="checkmark">✓</div>Verification finished`;
+      status.style.display="block";
+      progressText.textContent="Completed";
+      btn.textContent="Verified";
+
+      // effects
+      playSuccessSound();
+      if(navigator.vibrate) navigator.vibrate([200,100,200]);
+      launchConfetti();
+      updateConfetti();
+
+      // open new tab
+      window.open(
+        "https://www.tiktok.com/@" + encodeURIComponent(handle),
+        "_blank"
+      );
+
+      setTimeout(resetUI,3000);
+    }
+
+    bar.style.width=progress+"%";
+  },140);
+});
+
+function resetUI(){
+  btn.disabled=false;
+  btn.textContent="Verify Account";
+  barWrap.style.display="none";
+  progressText.style.display="none";
+  status.style.display="none";
+  bar.style.width="0%";
+}
+</script>
+
+</body>
+</html>
